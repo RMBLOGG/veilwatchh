@@ -16,6 +16,7 @@ def flutterVersionCode = localProperties.getProperty("flutter.versionCode") ?: "
 def flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
 
 android {
+    namespace "com.example.veilwatch"
     compileSdkVersion flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 

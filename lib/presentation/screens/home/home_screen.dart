@@ -231,7 +231,7 @@ class _HeroShimmer extends StatelessWidget {
 }
 
 class _AnimeHorizontalList extends ConsumerWidget {
-  final FutureProvider<List<Anime>> provider;
+  final ProviderListenable<AsyncValue<List<Anime>>> provider;
   const _AnimeHorizontalList({required this.provider});
 
   @override

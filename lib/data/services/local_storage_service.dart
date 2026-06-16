@@ -61,7 +61,6 @@ class LocalStorageService {
       (h) => h.animeId == history.animeId && h.episodeId == history.episodeId,
     );
     list.insert(0, history);
-    // Keep max 100 entries
     if (list.length > 100) list.removeLast();
     await _prefs.setStringList(
       AppConstants.watchHistoryKey,

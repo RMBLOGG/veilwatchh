@@ -36,8 +36,8 @@ class AnimeApiService {
       );
       final data = res.data;
       return {
-        'ongoing': _parseCardList(data['ongoing']),
-        'recent': _parseCardList(data['recent']),
+        'ongoing': _parseAnimeList(data['ongoing']),
+        'recent': _parseAnimeList(data['recent']),
         'pagination': data['pagination'] != null
             ? ApiPagination.fromJson(data['pagination'])
             : null,
@@ -45,6 +45,13 @@ class AnimeApiService {
     } catch (e) {
       throw _handleError(e);
     }
+  }
+
+  // ─── Trending (ongoing dari home) ────────────────────────────────────────
+
+  Future<List<Anime>> getTrending() async {
+    final home = await getHome();
+    return (home['ongoing'] as List<Anime>? ?? []).take(10).toList();
   }
 
   // ─── Listing ─────────────────────────────────────────────────────────────
@@ -67,6 +74,13 @@ class AnimeApiService {
   Future<AnimeListResponse> getAnimeList({int page = 1}) async =>
       _fetchList(AppConstants.animeList, page: page);
 
+  // ─── Recent Episodes ─────────────────────────────────────────────────────
+
+  Future<List<Anime>> getRecentEpisodes() async {
+    final home = await getHome();
+    return (home['recent'] as List<Anime>? ?? []).take(10).toList();
+  }
+
   // ─── Search ──────────────────────────────────────────────────────────────
 
   Future<AnimeListResponse> searchAnime(String keyword, {int page = 1}) async {
@@ -77,40 +91,7 @@ class AnimeApiService {
         queryParameters: {'page': page},
       );
       return AnimeListResponse(
-        items: _parseCardList(res.data['animes']),
-        pagination: res.data['pagination'] != null
-            ? ApiPagination.fromJson(res.data['pagination'])
-            : null,
-      );
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<AnimeListResponse> advancedSearch({
-    String? genre,
-    String? status,
-    String? type,
-    String? season,
-    int? year,
-    String? order,
-    int page = 1,
-  }) async {
-    try {
-      final params = <String, dynamic>{'page': page};
-      if (genre != null) params['genre'] = genre;
-      if (status != null) params['status'] = status;
-      if (type != null) params['type'] = type;
-      if (season != null) params['season'] = season;
-      if (year != null) params['year'] = year;
-      if (order != null) params['order'] = order;
-
-      final res = await _dio.get(
-        AppConstants.advancedSearch,
-        queryParameters: params,
-      );
-      return AnimeListResponse(
-        items: _parseCardList(res.data['animes']),
+        items: _parseAnimeList(res.data['animes']),
         pagination: res.data['pagination'] != null
             ? ApiPagination.fromJson(res.data['pagination'])
             : null,
@@ -139,7 +120,7 @@ class AnimeApiService {
         queryParameters: {'page': page},
       );
       return AnimeListResponse(
-        items: _parseCardList(res.data['animes'] ?? res.data['data']),
+        items: _parseAnimeList(res.data['animes'] ?? res.data['data']),
         pagination: res.data['pagination'] != null
             ? ApiPagination.fromJson(res.data['pagination'])
             : null,
@@ -151,16 +132,60 @@ class AnimeApiService {
 
   // ─── Detail ──────────────────────────────────────────────────────────────
 
-  Future<AnimeDetail> getAnimeDetail(String slug) async {
+  Future<Anime> getAnimeDetail(String slug) async {
     try {
       final res = await _dio.get('${AppConstants.animeDetail}/$slug');
-      return AnimeDetail.fromJson(res.data['detail']);
+      final detail = res.data['detail'] as Map<String, dynamic>;
+      // Convert AnimeDetail fields ke Anime
+      final genres = (detail['genres'] as List<dynamic>?)
+              ?.map((g) => (g['name'] ?? '').toString())
+              .toList() ??
+          [];
+      return Anime(
+        id: slug,
+        title: detail['title'] ?? '',
+        titleEnglish: detail['title_english'],
+        titleJapanese: detail['title_japanese'] ?? detail['synonym'],
+        poster: detail['poster'] ?? '',
+        rating: double.tryParse(detail['rating']?.toString() ?? ''),
+        genres: genres,
+        type: detail['type'],
+        status: detail['status'],
+        synopsis: detail['synopsis'],
+      );
     } catch (e) {
       throw _handleError(e);
     }
   }
 
-  // ─── Episode / Stream ────────────────────────────────────────────────────
+  // ─── Episodes ────────────────────────────────────────────────────────────
+
+  Future<List<EpisodeItem>> getEpisodes(String animeSlug) async {
+    try {
+      final res = await _dio.get('${AppConstants.animeDetail}/$animeSlug');
+      final detail = res.data['detail'] as Map<String, dynamic>;
+      return (detail['episodes'] as List<dynamic>?)
+              ?.map((e) => EpisodeItem.fromJson(e))
+              .toList() ??
+          [];
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  // ─── Stream Sources ──────────────────────────────────────────────────────
+
+  Future<List<StreamSource>> getStreamSources(String episodeSlug) async {
+    try {
+      final res = await _dio.get('${AppConstants.episode}/$episodeSlug');
+      return (res.data['streams'] as List<dynamic>?)
+              ?.map((s) => StreamSource.fromJson(s))
+              .toList() ??
+          [];
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
 
   Future<EpisodeDetail> getEpisodeDetail(String slug) async {
     try {
@@ -179,14 +204,13 @@ class AnimeApiService {
         path,
         queryParameters: {'page': page},
       );
-      // home endpoint pakai 'ongoing'/'recent', list endpoint pakai 'animes'/'data'
       final rawList = res.data['animes'] ??
           res.data['data'] ??
           res.data['ongoing'] ??
           res.data['recent'] ??
           [];
       return AnimeListResponse(
-        items: _parseCardList(rawList),
+        items: _parseAnimeList(rawList),
         pagination: res.data['pagination'] != null
             ? ApiPagination.fromJson(res.data['pagination'])
             : null,
@@ -196,10 +220,10 @@ class AnimeApiService {
     }
   }
 
-  List<AnimeCard> _parseCardList(dynamic raw) {
+  List<Anime> _parseAnimeList(dynamic raw) {
     if (raw == null) return [];
     return (raw as List<dynamic>)
-        .map((e) => AnimeCard.fromJson(e as Map<String, dynamic>))
+        .map((e) => Anime.fromCardJson(e as Map<String, dynamic>))
         .toList();
   }
 

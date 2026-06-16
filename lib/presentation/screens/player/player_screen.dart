@@ -1,12 +1,12 @@
-import 'package:better_player/better_player.dart';
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/anime_model.dart';
-import '../../../data/services/local_storage_service.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String episodeId;
@@ -27,7 +27,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  BetterPlayerController? _controller;
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
   bool _initialized = false;
 
   @override
@@ -42,57 +43,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _chewieController?.dispose();
+    _videoController?.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
 
-  void _initPlayer(String url, bool isM3u8) {
-    final dataSource = isM3u8
-        ? BetterPlayerDataSource(
-            BetterPlayerDataSourceType.network,
-            url,
-            videoFormat: BetterPlayerVideoFormat.hls,
-          )
-        : BetterPlayerDataSource(
-            BetterPlayerDataSourceType.network,
-            url,
-          );
+  Future<void> _initPlayer(String url, bool isM3u8) async {
+    // Dispose previous controllers
+    _chewieController?.dispose();
+    await _videoController?.dispose();
 
-    _controller = BetterPlayerController(
-      BetterPlayerConfiguration(
-        autoPlay: true,
-        aspectRatio: 16 / 9,
-        fullScreenByDefault: false,
-        allowedScreenSleep: false,
-        controlsConfiguration: const BetterPlayerControlsConfiguration(
-          controlBarColor: Colors.black54,
-          iconsColor: Colors.white,
-          progressBarPlayedColor: VeilwatchColors.accent,
-          progressBarHandleColor: VeilwatchColors.accent,
-          progressBarBackgroundColor: Colors.white24,
-          loadingColor: VeilwatchColors.accent,
-          enableSkips: true,
-          forwardSkipTimeInMilliseconds: 10000,
-          backwardSkipTimeInMilliseconds: 10000,
-        ),
-        eventListener: (event) {
-          if (event.betterPlayerEventType == BetterPlayerEventType.progress) {
-            _saveProgress();
-          }
-        },
+    _videoController = isM3u8
+        ? VideoPlayerController.networkUrl(
+            Uri.parse(url),
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+          )
+        : VideoPlayerController.networkUrl(Uri.parse(url));
+
+    await _videoController!.initialize();
+
+    _chewieController = ChewieController(
+      videoPlayerController: _videoController!,
+      autoPlay: true,
+      looping: false,
+      aspectRatio: 16 / 9,
+      allowFullScreen: true,
+      allowMuting: true,
+      showControls: true,
+      materialProgressColors: ChewieProgressColors(
+        playedColor: VeilwatchColors.accent,
+        handleColor: VeilwatchColors.accent,
+        backgroundColor: Colors.white24,
+        bufferedColor: Colors.white38,
       ),
-      betterPlayerDataSource: dataSource,
     );
 
-    setState(() => _initialized = true);
+    // Save progress periodically
+    _videoController!.addListener(_onVideoProgress);
+
+    if (mounted) setState(() => _initialized = true);
   }
 
-  void _saveProgress() {
-    if (_controller == null) return;
-    final pos = _controller!.videoPlayerController?.value.position.inSeconds ?? 0;
-    final dur = _controller!.videoPlayerController?.value.duration?.inSeconds ?? 0;
-    if (dur == 0) return;
+  void _onVideoProgress() {
+    if (_videoController == null) return;
+    final pos = _videoController!.value.position.inSeconds;
+    final dur = _videoController!.value.duration.inSeconds;
+    if (dur == 0 || pos % 10 != 0) return; // save every 10s
 
     ref.read(watchHistoryProvider.notifier).saveProgress(
           WatchHistory(
@@ -123,15 +120,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               loading: () => const Center(
                 child: CircularProgressIndicator(color: VeilwatchColors.accent),
               ),
-              error: (e, _) => Center(
+              error: (e, _) => const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.white54, size: 40),
-                    const SizedBox(height: 8),
+                    Icon(Icons.error_outline, color: Colors.white54, size: 40),
+                    SizedBox(height: 8),
                     Text(
                       'Failed to load stream',
-                      style: const TextStyle(color: Colors.white54),
+                      style: TextStyle(color: Colors.white54),
                     ),
                   ],
                 ),
@@ -158,7 +155,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         color: VeilwatchColors.accent),
                   );
                 }
-                return BetterPlayer(controller: _controller!);
+                return Chewie(controller: _chewieController!);
               },
             ),
           ),
@@ -170,7 +167,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Back + title
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                     child: Row(

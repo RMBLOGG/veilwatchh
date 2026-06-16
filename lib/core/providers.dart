@@ -14,7 +14,8 @@ final trendingProvider = FutureProvider.autoDispose<List<Anime>>((ref) async {
 
 // Home - Popular
 final popularProvider = FutureProvider.autoDispose<List<Anime>>((ref) async {
-  return ref.read(apiServiceProvider).getPopular();
+  final res = await ref.read(apiServiceProvider).getPopular();
+  return res.items;
 });
 
 // Home - Recent Episodes
@@ -23,18 +24,18 @@ final recentProvider = FutureProvider.autoDispose<List<Anime>>((ref) async {
 });
 
 // Anime Detail
-final animeDetailProvider = FutureProvider.autoDispose.family<Anime, String>((ref, id) async {
-  return ref.read(apiServiceProvider).getAnimeDetail(id);
+final animeDetailProvider = FutureProvider.autoDispose.family<Anime, String>((ref, slug) async {
+  return ref.read(apiServiceProvider).getAnimeDetail(slug);
 });
 
 // Episodes
-final episodesProvider = FutureProvider.autoDispose.family<List<Episode>, String>((ref, animeId) async {
-  return ref.read(apiServiceProvider).getEpisodes(animeId);
+final episodesProvider = FutureProvider.autoDispose.family<List<EpisodeItem>, String>((ref, animeSlug) async {
+  return ref.read(apiServiceProvider).getEpisodes(animeSlug);
 });
 
 // Stream Sources
-final streamSourcesProvider = FutureProvider.autoDispose.family<List<StreamSource>, String>((ref, episodeId) async {
-  return ref.read(apiServiceProvider).getStreamSources(episodeId);
+final streamSourcesProvider = FutureProvider.autoDispose.family<List<StreamSource>, String>((ref, episodeSlug) async {
+  return ref.read(apiServiceProvider).getStreamSources(episodeSlug);
 });
 
 // Search
@@ -43,7 +44,8 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 final searchResultsProvider = FutureProvider.autoDispose<List<Anime>>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return [];
-  return ref.read(apiServiceProvider).searchAnime(query);
+  final res = await ref.read(apiServiceProvider).searchAnime(query);
+  return res.items;
 });
 
 // Library

@@ -48,8 +48,9 @@ dev_dependencies:
   retrofit_generator: ^8.1.0
   hive_generator: ^2.0.1
 
-flutter:
-  uses-material-design: true
+dependency_overrides:
+  package_info_plus: ^8.1.2
+
   assets:
     - assets/images/
   fonts:
